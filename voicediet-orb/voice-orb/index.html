@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VoiceDiet Orb — голосовой ввод</title>
+<style>
+  :root {
+    --bg-a: #dfe7fe; --bg-b: #b8c4fd; --bg-c: #9fa1ef;
+    --ink: #2e2c4f; --ink-soft: #5b5a85; --accent: #6b5cff;
+    --panel: rgba(255, 255, 255, 0.66); --line: rgba(46, 44, 79, 0.12);
+  }
+  * { box-sizing: border-box; }
+  html { min-height: 100%; background: linear-gradient(115deg, var(--bg-a) 0%, var(--bg-b) 48%, var(--bg-c) 100%) fixed; }
+  body { margin: 0; min-height: 100vh; }
+  body {
+    color: var(--ink); font: 14px/1.35 "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; align-items: center; min-height: 100%; overflow-x: hidden;
+  }
+  html:has(body.bg-transparent), html.bg-none { background: transparent; }
+  body.bg-transparent {
+    background: repeating-conic-gradient(#e7e7ee 0% 25%, #ffffff 0% 50%) 0 0 / 24px 24px;
+  }
+  main { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px 16px 0; }
+  #orb { width: min(92vw, calc(100vh - 290px), 640px); aspect-ratio: 1; min-width: 240px; }
+  #caption { margin-top: 4px; min-height: 22px; font-size: 17px; letter-spacing: .01em; color: var(--ink); text-align: center; }
+  #badge {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    padding: 4px 10px; border-radius: 99px; font-size: 12px; background: #fff3c8; color: #6a4b00;
+    border: 1px solid #e8d48a; display: none;
+  }
+  #badge.on { display: block; }
+  #panel {
+    width: calc(100% - 32px); max-width: 860px; margin: 12px 16px 16px; padding: 12px 14px;
+    border-radius: 16px; background: var(--panel); backdrop-filter: blur(10px); border: 1px solid var(--line);
+    display: grid; gap: 10px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .group { display: flex; gap: 4px; flex-wrap: wrap; }
+  .lbl { color: var(--ink-soft); font-size: 12px; min-width: 64px; }
+  button {
+    font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line);
+    border-radius: 10px; padding: 7px 12px; cursor: pointer; min-height: 36px;
+  }
+  button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label.s { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+  input[type="range"] { width: 96px; accent-color: var(--accent); }
+  #meter { width: 120px; height: 8px; border-radius: 4px; background: rgba(46,44,79,.12); overflow: hidden; }
+  #meter i { display: block; height: 100%; width: 0; background: var(--accent); }
+  #info { font-size: 12px; color: var(--ink-soft); }
+  body.capture #panel, body.capture #badge { display: none; }
+  body.capture main { padding: 0; }
+  body.capture #orb { width: 100vmin; min-width: 0; }
+  body.capture #caption { position: fixed; bottom: 5.5vmin; left: 0; right: 0; font-size: 3.2vmin; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div id="badge" role="status">Тестовый аудиосигнал (микрофон не подключён)</div>
+<main>
+  <div id="orb"></div>
+  <div id="caption" aria-live="polite"></div>
+</main>
+<section id="panel" aria-label="Демонстрационная панель">
+  <div class="row">
+    <span class="lbl">Состояние</span>
+    <div class="group" id="states">
+      <button data-s="idle" aria-pressed="true">Ожидание</button>
+      <button data-s="listening">Прослушивание</button>
+      <button data-s="processing">Обработка</button>
+      <button data-s="ready">Готово</button>
+    </div>
+    <button id="scenario">▶ Сценарий</button>
+  </div>
+  <div class="row">
+    <span class="lbl">Аудио</span>
+    <div class="group">
+      <button id="aTest" aria-pressed="true">Тестовый сигнал</button>
+      <button id="aMic">Микрофон</button>
+    </div>
+    <div id="meter" title="Сглаженный уровень"><i></i></div>
+    <label class="s">Чувствительность <input id="pGain" type="range" min="0" max="2" step="0.05" value="1"></label>
+  </div>
+  <div class="row">
+    <span class="lbl">Параметры</span>
+    <label class="s">Скорость ядра <input id="pCore" type="range" min="0" max="3" step="0.05" value="1"></label>
+    <label class="s">Амплитуда сетки <input id="pAmp" type="range" min="0" max="2.5" step="0.05" value="1"></label>
+    <label class="s">Скорость сетки <input id="pSpeed" type="range" min="0" max="3" step="0.05" value="1"></label>
+    <label class="s">Импульсы <input id="pPulse" type="range" min="0" max="2" step="0.05" value="1"></label>
+  </div>
+  <div class="row">
+    <span class="lbl">Проверка</span>
+    <div class="group">
+      <button id="bgBrand" aria-pressed="true">Фирменный фон</button>
+      <button id="bgAlpha">Прозрачный</button>
+      <button id="rm">Упрощённое движение</button>
+    </div>
+    <span id="info"></span>
+  </div>
+</section>
+<script type="importmap">
+  { "imports": { "three": "../viewer/vendor/three.module.js", "three/addons/": "../viewer/vendor/jsm/" } }
+</script>
+<script type="module">
+  import { createVoiceOrb } from './voice-orb.js';
+
+  const qs = new URLSearchParams(location.search);
+  const CAPTURE = qs.has('capture');
+  if (CAPTURE) document.body.classList.add('capture');
+  if (qs.get('bg') === 'none') document.documentElement.classList.add('bg-none');
+
+  const LABELS = { idle: 'Ожидание', listening: 'Слушаю…', processing: 'Обрабатываю…', ready: 'Готово' };
+  const caption = document.getElementById('caption');
+  const orb = await createVoiceOrb(document.getElementById('orb'), { manual: CAPTURE });
+  window.__orb = orb;
+
+  const showCaption = s => { caption.textContent = qs.get('caption') === '0' ? '' : LABELS[s]; };
+  showCaption(orb.state);
+  orb.useTestSignal(true);
+
+  const stateBtns = [...document.querySelectorAll('#states button')];
+  orb.on('state', ({ state }) => {
+    stateBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === state)));
+    showCaption(state);
+  });
+  stateBtns.forEach(b => b.onclick = () => { stopScenario(); orb.setState(b.dataset.s); });
+
+  // сценарий: ожидание → речь → обработка → готово → ожидание
+  let timers = [];
+  function stopScenario() { timers.forEach(clearTimeout); timers = []; }
+  document.getElementById('scenario').onclick = () => {
+    stopScenario();
+    orb.setState('idle');
+    if (orb.audioSource !== 'mic') orb.useTestSignal(true);
+    timers.push(setTimeout(() => { orb.useTestSignal(orb.audioSource !== 'mic'); orb.setState('listening'); }, 2500));
+    timers.push(setTimeout(() => orb.setState('processing'), 2500 + 12000));
+    timers.push(setTimeout(() => orb.setState('ready'), 2500 + 12000 + 4500));
+  };
+
+  const badge = document.getElementById('badge');
+  const aTest = document.getElementById('aTest'), aMic = document.getElementById('aMic');
+  function syncAudio() {
+    const src = orb.audioSource;
+    aTest.setAttribute('aria-pressed', String(src === 'test'));
+    aMic.setAttribute('aria-pressed', String(src === 'mic'));
+    badge.classList.toggle('on', src === 'test');
+  }
+  aTest.onclick = () => { orb.useTestSignal(true); syncAudio(); };
+  aMic.onclick = async () => {
+    try { await orb.connectMicrophone(); }
+    catch (e) { orb.useTestSignal(true); alert('Микрофон недоступен: ' + e.message + '\nОставлен тестовый сигнал.'); }
+    syncAudio();
+  };
+  syncAudio();
+
+  const bind = (id, key) => document.getElementById(id).oninput = e => orb.setParams({ [key]: +e.target.value });
+  bind('pCore', 'coreSpeed'); bind('pAmp', 'shellAmplitude'); bind('pSpeed', 'shellSpeed');
+  bind('pPulse', 'pulseIntensity'); bind('pGain', 'audioGain');
+
+  const bgBrand = document.getElementById('bgBrand'), bgAlpha = document.getElementById('bgAlpha');
+  const setBg = alpha => {
+    document.body.classList.toggle('bg-transparent', alpha);
+    bgBrand.setAttribute('aria-pressed', String(!alpha)); bgAlpha.setAttribute('aria-pressed', String(alpha));
+  };
+  bgBrand.onclick = () => setBg(false); bgAlpha.onclick = () => setBg(true);
+  const rmBtn = document.getElementById('rm');
+  rmBtn.setAttribute('aria-pressed', String(orb.reducedMotion));
+  rmBtn.onclick = () => { orb.setReducedMotion(!orb.reducedMotion); rmBtn.setAttribute('aria-pressed', String(orb.reducedMotion)); };
+
+  const meter = document.querySelector('#meter i'), info = document.getElementById('info');
+  info.textContent = `Решётка: ${orb.lattice.pentagons} узлов, ${orb.lattice.edges} рёбер, ${orb.lattice.pointsOnEdges} точек на рёбрах`;
+  if (!CAPTURE) (function ui() { meter.style.width = (orb.audioLevel * 100).toFixed(1) + '%'; requestAnimationFrame(ui); })();
+
+  // режим съёмки: состояния и время задаёт скрипт записи
+  window.__capture = { setCaption: showCaption };
+  window.__ready = true;
+</script>
+</body>
+</html>

@@ -13,6 +13,7 @@
 | `blender/voicediet_orb.blend` | Редактируемый исходник: ядро с шейдером на нодах, оболочка (меш икосферы, точки через Geometry Nodes `VD_ShellDots`), камера референса |
 | `export/voicediet_orb.glb` | GLB: `VD_Orb` → `VD_Core` (сфера + PBR), `VD_Shell` (10 242 точки, POINTS, атрибут `_REST_DIR`), `VD_Camera` |
 | `viewer/` | Интерактивный просмотр на Three.js: вращение, ракурс референса, слои, наложение оригинала |
+| `voice-orb/` | **Анимированный компонент для экрана голосового ввода**: состояния ожидание / прослушивание / обработка / готово, демо-страница, видео. См. `voice-orb/README.md` |
 | `renders/threejs_ref_view.png` | Рендер с ракурса референса (Three.js, 1024², на фоне слайда) |
 | `renders/blender_ref_view.png` | Тот же ракурс в Blender Cycles (прозрачный фон) |
 | `renders/voicediet_orb_turntable.mp4` | Облёт 360°, 96 кадров, 1024², H.264 |
