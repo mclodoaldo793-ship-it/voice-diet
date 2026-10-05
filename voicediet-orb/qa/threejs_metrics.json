@@ -1,0 +1,11 @@
+{
+ "rmse_full_255": 10.794118881225586,
+ "rmse_full_blur3_255": 3.618056297302246,
+ "rmse_core_region_blur3_255": 4.514715194702148,
+ "silhouette_iou": 0.9784562401736917,
+ "density_corr_blur2": 0.8152914060809443,
+ "density_corr_blur4": 0.9716952347701955,
+ "density_corr_blur8": 0.9868926340453359,
+ "mean_alpha_ref": 0.12571710348129272,
+ "mean_alpha_render": 0.12842562794685364
+}

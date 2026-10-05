@@ -1,0 +1,77 @@
+{
+ "objects": {
+  "VD_Camera": {
+   "type": "CAMERA",
+   "parent": null,
+   "fov_deg": 30.0,
+   "location": [
+    0.0,
+    -5.3724,
+    0.0
+   ]
+  },
+  "VD_Core": {
+   "type": "MESH",
+   "parent": "VD_Orb",
+   "verts": 8383,
+   "faces": 16128,
+   "edges": 24510,
+   "materials": [
+    "VD_Core_GLTF"
+   ],
+   "attributes": [
+    "position",
+    ".select_vert",
+    ".edge_verts",
+    "sharp_edge",
+    "material_index",
+    ".select_poly",
+    "sharp_face",
+    ".corner_vert",
+    ".corner_edge",
+    "custom_normal",
+    "UVMap"
+   ]
+  },
+  "VD_Orb": {
+   "type": "EMPTY",
+   "parent": null
+  },
+  "VD_Shell": {
+   "type": "MESH",
+   "parent": "VD_Orb",
+   "verts": 10242,
+   "faces": 0,
+   "edges": 0,
+   "materials": [
+    "VD_Dot_Mat"
+   ],
+   "attributes": [
+    "position",
+    "_REST_DIR",
+    ".select_vert",
+    ".edge_verts",
+    "material_index",
+    "sharp_face",
+    ".corner_vert"
+   ]
+  }
+ },
+ "shell_max_abs_err": 2.428102876539384e-07,
+ "core_radius": 0.9999997447288458,
+ "core_gltf_material": {
+  "Base Color": [
+   1.0,
+   0.638,
+   0.991
+  ],
+  "Emission Color": [
+   0.192,
+   0.01,
+   0.222
+  ],
+  "Emission Strength": 1.0,
+  "Roughness": 0.25,
+  "Coat Weight": 1.0
+ }
+}

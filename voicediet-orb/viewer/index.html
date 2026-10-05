@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoiceDiet Orb</title>
+<style>
+  :root {
+    --bg-a: #dfe7fe;
+    --bg-b: #b8c4fd;
+    --bg-c: #9fa1ef;
+    --ink: #2e2c4f;
+    --ink-soft: #5b5a85;
+    --accent: #6699ff;
+    --panel: rgba(255, 255, 255, 0.62);
+    --line: rgba(46, 44, 79, 0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --panel: rgba(255, 255, 255, 0.7); }
+  }
+  :root[data-theme="dark"] { --panel: rgba(255, 255, 255, 0.7); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: linear-gradient(115deg, var(--bg-a) 0%, var(--bg-b) 48%, var(--bg-c) 100%);
+    color: var(--ink);
+    font: 14px/1.35 "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  #overlay {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    pointer-events: none; opacity: 0; transition: opacity .15s;
+  }
+  #ui {
+    position: fixed; left: 16px; right: 16px; bottom: 16px; margin: 0 auto; max-width: 760px;
+    display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+    padding: 10px 14px; border-radius: 14px; background: var(--panel);
+    backdrop-filter: blur(10px); border: 1px solid var(--line);
+  }
+  #ui .title { font-weight: 600; margin-right: auto; }
+  #ui .title small { display: block; font-weight: 400; color: var(--ink-soft); font-size: 12px; }
+  button {
+    font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line);
+    border-radius: 9px; padding: 6px 11px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; }
+  input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
+  input[type="range"] { width: 110px; }
+  #status { position: fixed; top: 16px; left: 16px; color: var(--ink-soft); font-size: 12px; }
+  body.capture #ui, body.capture #status { display: none; }
+  body.capture { background: #000; }
+  body.capture.bg-ref { background: url("../reference/ref_bg.png") center / 100% 100% no-repeat; }
+</style>
+</head>
+<body>
+<img id="overlay" src="../reference/ref_full.png" alt="">
+<div id="status">Загрузка модели…</div>
+<div id="ui" hidden>
+  <div class="title">VoiceDiet Orb<small>Тяните — вращение, колесо — масштаб</small></div>
+  <button id="btnRef" type="button">Ракурс референса</button>
+  <label><input id="tCore" type="checkbox" checked> Ядро</label>
+  <label><input id="tShell" type="checkbox" checked> Оболочка</label>
+  <label><input id="tSpin" type="checkbox"> Вращение</label>
+  <label title="Наложение исходного кадра из PDF (только в ракурсе референса)">Оригинал <input id="rOverlay" type="range" min="0" max="100" value="0"></label>
+</div>
+<script type="importmap">
+  { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/jsm/" } }
+</script>
+<script type="module" src="./orb.js"></script>
+</body>
+</html>
