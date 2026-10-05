@@ -350,7 +350,8 @@ export async function createVoiceOrb(container, options = {}) {
   const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 100);
 
   const [gltf, coreParams] = await Promise.all([
-    new GLTFLoader().loadAsync(opt.modelUrl),
+    // modelData (ArrayBuffer) — если модель уже в памяти или среда не разрешает загрузку по URL
+    opt.modelData ? new GLTFLoader().parseAsync(opt.modelData, '') : new GLTFLoader().loadAsync(opt.modelUrl),
     fetch(opt.coreParamsUrl).then(r => r.json()),
   ]);
   scene.add(gltf.scene);

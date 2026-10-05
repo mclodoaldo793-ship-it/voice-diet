@@ -80,7 +80,7 @@ useEffect(() => { orbRef.current?.setState(state); }, [state]);
 | `dispose()` | Останавливает цикл, микрофон и наблюдатели, освобождает геометрию, материалы и WebGL-контекст, удаляет canvas |
 | `advance(dt)` / `render()` | Только при `manual: true`: детерминированный шаг для записи видео |
 
-Опции `createVoiceOrb`: `modelUrl`, `coreParamsUrl`, `fit` (доля контейнера под кадр референса, 0.9),
+Опции `createVoiceOrb`: `modelUrl` (или `modelData` — ArrayBuffer с GLB), `coreParamsUrl`, `fit` (доля контейнера под кадр референса, 0.9),
 `maxPixelRatio` (2), `reducedMotion` ('auto'), `manual` (false), `seed` (7), `autoIdleAfterReady` (true), `params`.
 
 ## Как устроено движение
