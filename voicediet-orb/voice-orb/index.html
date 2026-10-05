@@ -138,6 +138,7 @@
   };
 
   const badge = document.getElementById('badge');
+  const BADGE_TEXT = badge.textContent;
   const aTest = document.getElementById('aTest'), aMic = document.getElementById('aMic');
   function syncAudio() {
     const src = orb.audioSource;
@@ -145,10 +146,14 @@
     aMic.setAttribute('aria-pressed', String(src === 'mic'));
     badge.classList.toggle('on', src === 'test');
   }
-  aTest.onclick = () => { orb.useTestSignal(true); syncAudio(); };
+  aTest.onclick = () => { orb.useTestSignal(true); badge.textContent = BADGE_TEXT; syncAudio(); };
   aMic.onclick = async () => {
     try { await orb.connectMicrophone(); }
-    catch (e) { orb.useTestSignal(true); alert('Микрофон недоступен: ' + e.message + '\nОставлен тестовый сигнал.'); }
+    catch (e) {
+      orb.useTestSignal(true); syncAudio();
+      badge.textContent = 'Микрофон недоступен, работает тестовый аудиосигнал';
+      return;
+    }
     syncAudio();
   };
   syncAudio();
