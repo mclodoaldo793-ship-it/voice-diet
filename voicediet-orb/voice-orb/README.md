@@ -45,7 +45,7 @@ npx http-server voicediet-orb -p 8765 -s      # или: py -m http.server 8765 -
   // события экрана голосового ввода
   micButton.onpointerdown = async () => { await orb.connectMicrophone(); orb.setState('listening'); };
   recognizer.onspeechend   = () => orb.setState('processing');
-  recognizer.onresult      = () => orb.setState('ready');      // сам вернётся в 'idle' через 1.6 с
+  recognizer.onresult      = () => orb.setState('ready');      // сам вернётся в 'idle' через 1.8 с
   // при уходе с экрана:
   // orb.dispose();
 </script>

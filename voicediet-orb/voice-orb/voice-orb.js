@@ -45,7 +45,7 @@ const VOICE_AMP = 0.03;            // добавка при громкой ре�
 const COUPLE_AMP = 0.01;           // отклик на ориентацию ядра (2-я гармоника)
 const RIPPLE_AMP = 0.009;          // рябь от узла в обработке
 const READY_AMP = 0.018;           // единственная волна «готово»
-const READY_SECONDS = 1.6;
+const READY_SECONDS = 1.8;
 const CORE_TILT = THREE.MathUtils.degToRad(14);   // наклон окраски ядра при прецессии
 const tiltAxis = new THREE.Vector3();
 
@@ -555,7 +555,7 @@ export async function createVoiceOrb(container, options = {}) {
       readyT += dt;
       const p = readyT / READY_SECONDS;
       const envR = Math.sin(Math.PI * clamp01(p)) ** 2;
-      readyFront = rm ? 1.1 : 1.9 * (1 - Math.pow(1 - clamp01(p), 2.2));   // упрощённо: свечение без бега
+      readyFront = rm ? 1.1 : 1.9 * (0.5 - 0.5 * Math.cos(Math.PI * clamp01(p)));   // упрощённо: свечение без бега
       readyAmp = rm ? 0 : READY_AMP * envR;
       readyGlow = 0.35 * envR * params.pulseIntensity;
       if (p >= 1) {
