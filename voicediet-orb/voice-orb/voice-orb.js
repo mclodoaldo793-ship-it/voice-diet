@@ -546,7 +546,7 @@ export async function createVoiceOrb(container, options = {}) {
     for (let i = ripples.length - 1; i >= 0; i--) if (ripples[i].t > 2.5) ripples.splice(i, 1);
     for (let i = 0; i < 12; i++) {
       nodeKick[i] *= Math.exp(-dt / 0.35);
-      nodeGlow[i] = approach(nodeGlow[i], nodeKick[i], dt, 0.07);
+      nodeGlow[i] = approach(nodeGlow[i], nodeKick[i], dt, 0.12);
     }
 
     // «готово»: одна волна от центра к краю
@@ -580,7 +580,7 @@ export async function createVoiceOrb(container, options = {}) {
       const rp = ripples[i];
       if (rp) {
         u.uRipple.value[i].set(rp.dir.x, rp.dir.y, rp.dir.z, 0.15 + 1.1 * rp.t);
-        u.uRippleAmp.value[i] = RIPPLE_AMP * ampK * rp.amp * Math.exp(-rp.t / 0.7) * smooth(rp.t / 0.12);
+        u.uRippleAmp.value[i] = RIPPLE_AMP * ampK * rp.amp * Math.exp(-rp.t / 0.8) * smooth(rp.t / 0.3);
       } else u.uRippleAmp.value[i] = 0;
     }
     u.uReady.value.set(readyFront, readyAmp * ampK, readyGlow);
