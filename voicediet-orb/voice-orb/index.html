@@ -49,6 +49,7 @@
   #meter { width: 120px; height: 8px; border-radius: 4px; background: rgba(46,44,79,.12); overflow: hidden; }
   #meter i { display: block; height: 100%; width: 0; background: var(--accent); }
   #info { font-size: 12px; color: var(--ink-soft); }
+  #paramsOut { font: 12px/1.4 ui-monospace, Consolas, monospace; background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; overflow-wrap: anywhere; min-width: 0; flex: 1 1 280px; user-select: all; }
   body.capture #panel, body.capture #badge { display: none; }
   body.capture main { padding: 0; }
   body.capture #orb { width: 100vmin; min-width: 0; }
@@ -96,6 +97,12 @@
       <button id="rm">Упрощённое движение</button>
     </div>
     <span id="info"></span>
+  </div>
+  <div class="row">
+    <span class="lbl">Настройки</span>
+    <code id="paramsOut"></code>
+    <button id="copyParams">Скопировать</button>
+    <button id="resetParams">Сбросить</button>
   </div>
 </section>
 <script type="importmap">
@@ -158,9 +165,24 @@
   };
   syncAudio();
 
-  const bind = (id, key) => document.getElementById(id).oninput = e => orb.setParams({ [key]: +e.target.value });
-  bind('pCore', 'coreSpeed'); bind('pAmp', 'shellAmplitude'); bind('pSpeed', 'shellSpeed');
-  bind('pPulse', 'pulseIntensity'); bind('pGain', 'audioGain');
+  // текущие значения регуляторов в виде строки для кода: createVoiceOrb(el, { params: {...} })
+  const SLIDERS = { pCore: 'coreSpeed', pAmp: 'shellAmplitude', pSpeed: 'shellSpeed', pPulse: 'pulseIntensity', pGain: 'audioGain' };
+  const paramsOut = document.getElementById('paramsOut');
+  const showParams = () => { paramsOut.textContent = 'params: ' + JSON.stringify(orb.getParams()).replace(/"/g, '').replace(/,/g, ', ').replace(/:/g, ': '); };
+  for (const [id, key] of Object.entries(SLIDERS)) {
+    document.getElementById(id).oninput = e => { orb.setParams({ [key]: +e.target.value }); showParams(); };
+  }
+  showParams();
+  const copyBtn = document.getElementById('copyParams');
+  copyBtn.onclick = async () => {
+    try { await navigator.clipboard.writeText('{ ' + paramsOut.textContent + ' }'); copyBtn.textContent = 'Скопировано'; }
+    catch { getSelection().selectAllChildren(paramsOut); copyBtn.textContent = 'Выделено — Ctrl+C'; }
+    setTimeout(() => { copyBtn.textContent = 'Скопировать'; }, 1600);
+  };
+  document.getElementById('resetParams').onclick = () => {
+    for (const [id, key] of Object.entries(SLIDERS)) { document.getElementById(id).value = 1; orb.setParams({ [key]: 1 }); }
+    showParams();
+  };
 
   const bgBrand = document.getElementById('bgBrand'), bgAlpha = document.getElementById('bgAlpha');
   const setBg = alpha => {
