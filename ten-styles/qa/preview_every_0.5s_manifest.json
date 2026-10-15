@@ -1,7 +1,7 @@
 {
   "input": "/home/user/voice-diet/ten-styles/renders/preview.mp4",
   "fps": 30.0,
-  "duration": 34.005,
+  "duration": 24.277,
   "width": 960,
   "height": 540,
   "frames": [
@@ -249,101 +249,6 @@
       "file": "t024.000s.jpg",
       "t": 24.0,
       "frame": 720
-    },
-    {
-      "file": "t024.500s.jpg",
-      "t": 24.5,
-      "frame": 735
-    },
-    {
-      "file": "t025.000s.jpg",
-      "t": 25.0,
-      "frame": 750
-    },
-    {
-      "file": "t025.500s.jpg",
-      "t": 25.5,
-      "frame": 765
-    },
-    {
-      "file": "t026.000s.jpg",
-      "t": 26.0,
-      "frame": 780
-    },
-    {
-      "file": "t026.500s.jpg",
-      "t": 26.5,
-      "frame": 795
-    },
-    {
-      "file": "t027.000s.jpg",
-      "t": 27.0,
-      "frame": 810
-    },
-    {
-      "file": "t027.500s.jpg",
-      "t": 27.5,
-      "frame": 825
-    },
-    {
-      "file": "t028.000s.jpg",
-      "t": 28.0,
-      "frame": 840
-    },
-    {
-      "file": "t028.500s.jpg",
-      "t": 28.5,
-      "frame": 855
-    },
-    {
-      "file": "t029.000s.jpg",
-      "t": 29.0,
-      "frame": 870
-    },
-    {
-      "file": "t029.500s.jpg",
-      "t": 29.5,
-      "frame": 885
-    },
-    {
-      "file": "t030.000s.jpg",
-      "t": 30.0,
-      "frame": 900
-    },
-    {
-      "file": "t030.500s.jpg",
-      "t": 30.5,
-      "frame": 915
-    },
-    {
-      "file": "t031.000s.jpg",
-      "t": 31.0,
-      "frame": 930
-    },
-    {
-      "file": "t031.500s.jpg",
-      "t": 31.5,
-      "frame": 945
-    },
-    {
-      "file": "t032.000s.jpg",
-      "t": 32.0,
-      "frame": 960
-    },
-    {
-      "file": "t032.500s.jpg",
-      "t": 32.5,
-      "frame": 975
-    },
-    {
-      "file": "t033.000s.jpg",
-      "t": 33.0,
-      "frame": 990
-    },
-    {
-      "file": "t033.500s.jpg",
-      "t": 33.5,
-      "frame": 1005
     }
   ]
 }

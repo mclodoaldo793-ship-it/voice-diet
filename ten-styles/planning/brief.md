@@ -44,8 +44,8 @@
 
 ## Результат
 - `renders/final.mp4` — 1920×1080, 30 fps, H.264, yuv420p, AAC 48 кГц
-- `renders/final_silent.mp4` — та же картинка без звука
 - `renders/preview.mp4` — 960×540, тот же тайминг
+- Версия без звука делается одной командой из `SETUP.txt` (в репозиторий не кладётся, чтобы не дублировать 40 МБ)
 - Исходники Remotion (`src/`), звук (`scripts/make_audio.py`), `planning/`, `qa/review.md`, `SETUP.txt`
 
 ## Ограничения
