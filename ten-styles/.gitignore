@@ -1,0 +1,8 @@
+node_modules/
+out/
+.remotion/
+qa/frames/
+renders/still-*.png
+renders/*_silent_tmp.mp4
+*.log
+__pycache__/

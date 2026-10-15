@@ -1,0 +1,44 @@
+ОДИН КРУГ — ДЕСЯТЬ СТИЛЕЙ · настройка и команды
+================================================
+
+Окружение, где собран ролик
+- Node.js 22.22.0, npm 10.9.4
+- Remotion 4.0.532 (remotion, @remotion/cli, @remotion/media), React 19.2.8, TypeScript 5.9.3
+- Шрифты: Fontsource 5.3.0 (Google Fonts, лицензия OFL), латиница + кириллица, локально
+- Python 3 + numpy + scipy (звук), Pillow (контактные листы)
+- FFmpeg 6.1.1 / ffprobe (проверка и извлечение кадров)
+- Браузер для рендера: Chromium Headless Shell из /opt/pw-browsers (путь задан в remotion.config.ts;
+  если его нет, Remotion скачает свой браузер сам). Можно переопределить переменной
+  REMOTION_BROWSER_EXECUTABLE.
+
+Установка
+  npm ci
+  pip install numpy scipy pillow
+
+Команды (из папки ten-styles)
+  npm run studio            — Remotion Studio: композиция TenStyles и каждая сцена отдельно (папка Scenes)
+  npm run check             — проверка типов TypeScript
+  npm run audio             — пересобрать звук: public/audio/soundtrack.wav
+  npm run audio:report      — баланс по октавам, пики, атаки
+  npm run styleframes       — кадры-образцы сцен и переходов в planning/styleframes
+  npm run render:preview    — renders/preview.mp4, 960×540, тот же тайминг
+  npm run render:final      — renders/final.mp4, 1920×1080, H.264 CRF 17, yuv420p, AAC
+  npm run still -- 130      — один кадр: renders/still-0130.png
+  npm run qa:frames         — кадры каждые 0,5 с из preview в qa/frames + manifest.json
+
+Без звука (сделано для финала)
+  ffmpeg -i renders/final.mp4 -an -c:v copy renders/final_silent.mp4
+
+Проверка
+  ffprobe -v error -show_entries stream=codec_name,width,height,avg_frame_rate,pix_fmt,sample_rate,channels:format=duration renders/final.mp4
+  ffmpeg -i public/audio/soundtrack.wav -af ebur128=peak=true -f null -
+  python3 scripts/audio_report.py public/audio/soundtrack.wav
+  python3 scripts/extract_frames.py renders/final.mp4 qa/frames --start 5.2 --end 5.7 --every-frame
+
+Ограничения среды, в которой делался ролик
+- Нет вывода звука: саундтрек проверен измерениями (громкость, истинный пик, спектр, атаки по сетке),
+  но не на слух.
+- Нет просмотра видео в реальном времени: движение проверено по кадрам (каждые 0,5 с и все кадры
+  в окнах переходов).
+- Лицензия Remotion: бесплатна для физических лиц и компаний до 3 человек; для больших компаний
+  нужна коммерческая лицензия (https://www.remotion.dev/license).
