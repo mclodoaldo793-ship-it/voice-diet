@@ -129,12 +129,12 @@ export const Y2K: React.FC = () => {
   const bs = 0.45 + 0.55 * inflate;
   const bsx = bs * (1 + 0.09 * jel);
   const bsy = bs * (1 - 0.09 * jel);
-  const bob = Math.sin(t * 0.07) * 6;
+  const bob = Math.sin(t * 0.11) * 12;
 
   const unfold = tw(t, 3, 20, 0, 1, EASE.outCubic);
   const rx = 400 * unfold;
   const ry = 96 * unfold;
-  const sat = 1.2 + t * 0.085;
+  const sat = 1.2 + t * 0.14;
   const satP: Pt = [Math.cos(sat) * rx, Math.sin(sat) * ry];
   const satBehind = Math.sin(sat) < 0;
 
@@ -203,7 +203,7 @@ export const Y2K: React.FC = () => {
         ))}
         {/* Рябь от пузыря */}
         {Array.from({length: 16}, (_, k) => {
-          const rr = 270 + k * 80 + ((t * 1.6) % 80);
+          const rr = 270 + k * 80 + ((t * 3.2) % 80);
           return <circle key={k} cx={C[0]} cy={C[1]} r={rr} fill="none" stroke="#FFFFFF" strokeOpacity={0.55 * Math.max(0, 1 - rr / 1450)} strokeWidth={1.6} />;
         })}
         {Array.from({length: 12}, (_, i) => {

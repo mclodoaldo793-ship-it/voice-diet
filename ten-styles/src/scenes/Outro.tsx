@@ -95,8 +95,9 @@ export const Outro: React.FC = () => {
   const r0 = 6 + 64 * grow;
   const halo = tw(t, 0, 8, 1, 0.35) * (1 - tw(t, 14, 30, 0, 1));
 
-  const titleUp = tw(t, 46, 60, 1, 0, EASE.outQuart);
-  const sheen = prog(t, 66, 88);
+  // итоговая строка — на третью долю такта (авторский кадр 40)
+  const titleUp = tw(t, 40, 52, 1, 0, EASE.outQuart);
+  const sheen = prog(t, 60, 82);
 
   return (
     <AbsoluteFill style={{backgroundColor: STAGE.bg}}>

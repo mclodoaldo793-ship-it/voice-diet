@@ -9,9 +9,61 @@ import type {TransitionSpec} from '../lib/timeline';
 // overlay — свет и линии поверх обеих.
 
 export type Slice = {y0: number; y1: number; dx: number};
-export type LayerFx = {style?: React.CSSProperties; slices?: Slice[]; hidden?: boolean};
+export type LayerFx = {style?: React.CSSProperties; slices?: Slice[]; hidden?: boolean; move?: string; blur?: number};
 
 const progress = (s: TransitionSpec, local: number) => clamp01((local + s.pre) / (s.pre + s.post));
+
+// Инерция: входящая сцена влетает и тормозит, уходящая разгоняется в сторону перехода
+const DIAG_N: Pt = [-Math.sin(deg(-28)), Math.cos(deg(-28))];
+// Размытие движения на самых быстрых кадрах перехода, px
+const MOTION_BLUR: Partial<Record<TransitionSpec['kind'], number>> = {
+  iris: 3,
+  clock: 2,
+  diagonal: 5,
+  columns: 4,
+  halftone: 3,
+  melt: 4,
+  shapes: 2,
+  flash: 4,
+  blinds: 4,
+};
+const motionBlur = (s: TransitionSpec, local: number, dir: 'in' | 'out') => {
+  const p = progress(s, local);
+  if (p <= 0 || p >= 1) return 0;
+  const k = dir === 'in' ? 1 - EASE.outCubic(p) : EASE.inCubic(p);
+  const b = (MOTION_BLUR[s.kind] ?? 0) * k;
+  return b > 0.4 ? b : 0;
+};
+
+const momentum = (s: TransitionSpec, local: number, dir: 'in' | 'out'): string | undefined => {
+  const p = progress(s, local);
+  if (p <= 0 || p >= 1) return undefined;
+  const k = dir === 'in' ? 1 - EASE.outCubic(p) : EASE.inCubic(p);
+  const sgn = dir === 'in' ? -1 : 1;
+  switch (s.kind) {
+    case 'iris':
+      // склейка по кругу: входящая сцена не масштабируется, иначе круг «прыгнет»
+      return dir === 'in' ? undefined : `scale(${1 + 0.08 * k})`;
+    case 'clock':
+      return `rotate(${(dir === 'in' ? -7 : 5) * k}deg) scale(${1 + 0.06 * k})`;
+    case 'diagonal':
+      return `translate(${sgn * DIAG_N[0] * 160 * k}px, ${sgn * DIAG_N[1] * 160 * k}px)`;
+    case 'columns':
+      return `translateY(${(dir === 'in' ? -80 : 60) * k}px)`;
+    case 'halftone':
+      return `scale(${1 + (dir === 'in' ? 0.16 : 0.1) * k})`;
+    case 'melt':
+      return `scale(${1 + (dir === 'in' ? 0.22 : 0.14) * k}) rotate(${(dir === 'in' ? 10 : -5) * k}deg)`;
+    case 'shapes':
+      return `scale(${1 - (dir === 'in' ? 0.08 : 0.05) * k})`;
+    case 'flash':
+      return `scale(${1 + (dir === 'in' ? 0.18 : 0.12) * k})`;
+    case 'blinds':
+      return `translateY(${(dir === 'in' ? 70 : -50) * k}px)`;
+    default:
+      return undefined;
+  }
+};
 
 const DIAG = deg(-28);
 const DIAG_W = 150;
@@ -98,6 +150,11 @@ const glitchSlices = (seed: string, intensity: number): Slice[] => {
 };
 
 export const incoming = (s: TransitionSpec, local: number): LayerFx => {
+  const fx = incomingMask(s, local);
+  return fx.hidden ? fx : {...fx, move: momentum(s, local, 'in'), blur: motionBlur(s, local, 'in')};
+};
+
+const incomingMask = (s: TransitionSpec, local: number): LayerFx => {
   const p = progress(s, local);
   const [ox, oy] = s.origin;
   if (local >= s.post) return {};
@@ -169,6 +226,13 @@ export const incoming = (s: TransitionSpec, local: number): LayerFx => {
 export const outgoing = (s: TransitionSpec, local: number): LayerFx => {
   if (local < -s.pre) return {};
   switch (s.kind) {
+    case 'glitch':
+    case 'crt':
+      break;
+    default:
+      return {move: momentum(s, local, 'out'), blur: motionBlur(s, local, 'out')};
+  }
+  switch (s.kind) {
     case 'glitch': {
       if (local >= 0) return {hidden: true};
       const k = tw(local, -s.pre, 0, 0.25, 1, EASE.inQuad);
@@ -180,8 +244,8 @@ export const outgoing = (s: TransitionSpec, local: number): LayerFx => {
     }
     case 'crt': {
       if (local >= 0) return {hidden: true};
-      const sy = local < -3 ? tw(local, -8, -3, 1, 0.006, EASE.inCubic) : 0.006;
-      const sx = local < -3 ? 1 : tw(local, -3, 0, 1, 0.012, EASE.inCubic);
+      const sy = local < -2 ? tw(local, -6, -2, 1, 0.006, EASE.inCubic) : 0.006;
+      const sx = local < -2 ? 1 : tw(local, -2, 0, 1, 0.012, EASE.inCubic);
       return {
         style: {
           transform: `scale(${sx}, ${sy})`,
@@ -322,7 +386,7 @@ export const TransitionOverlay: React.FC<{spec: TransitionSpec; local: number}> 
       );
     }
     case 'glitch': {
-      if (local < -4 || local > 2) return null;
+      if (local < -3 || local > 1) return null;
       const f = Math.floor(local);
       return svg(
         Array.from({length: 9}, (_, i) => {
@@ -343,15 +407,15 @@ export const TransitionOverlay: React.FC<{spec: TransitionSpec; local: number}> 
       );
     }
     case 'crt': {
-      if (local < -5 || local > 5) return null;
-      const lineK = local < -3 ? tw(local, -5, -3, 0, 1) : 1;
-      const w = local < -3 ? 1920 : tw(local, -3, 0, 1920, 24, EASE.inCubic);
+      if (local < -4 || local > 5) return null;
+      const lineK = local < -2 ? tw(local, -4, -2, 0, 1) : 1;
+      const w = local < -2 ? 1920 : tw(local, -2, 0, 1920, 24, EASE.inCubic);
       const fade = local <= 0 ? 1 : tw(local, 0, 5, 1, 0, EASE.outCubic);
       return svg(
         <>
           <rect x={960 - w / 2} y={530} width={w} height={20} fill="#FFFFFF" opacity={0.25 * lineK * fade} />
           <rect x={960 - w / 2} y={538} width={w} height={4} fill="#FFFFFF" opacity={lineK * fade} />
-          <circle cx={960} cy={540} r={60} fill="#FFFFFF" opacity={0.18 * fade * (local > -3 ? 1 : 0)} />
+          <circle cx={960} cy={540} r={60} fill="#FFFFFF" opacity={0.18 * fade * (local > -2 ? 1 : 0)} />
         </>,
       );
     }

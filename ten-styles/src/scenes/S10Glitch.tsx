@@ -142,7 +142,7 @@ export const Glitch: React.FC = () => {
           }}
         >
           <Freeze frame={hold}>
-            <SceneTime offset={0}>
+            <SceneTime offset={0} rate={1}>
               <Scene />
             </SceneTime>
           </Freeze>

@@ -8,7 +8,7 @@ import {Intro, Outro, SCENES} from './scenes';
 import {glitchAmount} from './scenes/glitchSchedule';
 import {STAGE, STYLES} from './lib/styles';
 import {SceneTime, useT} from './lib/time';
-import {INTRO_LEN, OUTRO_LEN, OUTRO_START, SCENE_LEN, sceneStart, TRANSITIONS} from './lib/timeline';
+import {INTRO_LEN, OUTRO_LEN, OUTRO_START, RATE, SCENE_LEN, sceneStart, TRANSITIONS} from './lib/timeline';
 
 type Segment = {
   id: string;
@@ -49,11 +49,22 @@ const SegmentLayer: React.FC<{seg: Segment; k: number; offset: number}> = ({seg,
   const fxOut = tout ? outgoing(tout, local - seg.len) : {};
   if (fxIn.hidden || fxOut.hidden) return null;
 
+  // Инерция перехода: входящая сцена «влетает», уходящая «улетает». HUD неподвижен.
+  const move = [fxIn.move, fxOut.move].filter(Boolean).join(' ');
+  const blur = Math.max(fxIn.blur ?? 0, fxOut.blur ?? 0);
   const content = (
-    <SceneTime offset={offset}>
-      <Camera segment={k} len={seg.len}>
-        <seg.Component />
-      </Camera>
+    <SceneTime offset={offset} rate={RATE}>
+      <AbsoluteFill
+        style={
+          move
+            ? {transform: move, transformOrigin: '960px 540px', filter: blur ? `blur(${blur.toFixed(2)}px)` : undefined}
+            : undefined
+        }
+      >
+        <Camera segment={k} len={seg.len * RATE}>
+          <seg.Component />
+        </Camera>
+      </AbsoluteFill>
       {seg.hud !== null ? <SceneHud hud={seg.hud} /> : null}
     </SceneTime>
   );

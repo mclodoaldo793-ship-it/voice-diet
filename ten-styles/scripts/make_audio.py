@@ -26,16 +26,17 @@ OUT = os.path.join(ROOT, "public", "audio", "soundtrack.wav")
 
 
 # ---------------------------------------------------------------- тайминг
-def read_timeline() -> dict[str, int]:
+def read_timeline() -> dict:
     path = os.path.join(ROOT, "src", "lib", "timeline.ts")
     with open(path, encoding="utf-8") as fh:
         src = fh.read()
-    out = {}
-    for name in ("FPS", "BEAT", "SCENE_LEN", "INTRO_LEN", "OUTRO_LEN", "STYLE_COUNT"):
+    out: dict = {}
+    for name in ("FPS", "BEAT", "SCENE_LEN", "INTRO_LEN", "OUTRO_LEN", "STYLE_COUNT", "AUTHOR_SCENE"):
         m = re.search(rf"export const {name} = (\d+);", src)
         if not m:
             raise SystemExit(f"не найдена константа {name} в {path}")
         out[name] = int(m.group(1))
+    out["TRANSITIONS"] = [(k, int(a), int(b)) for k, a, b in re.findall(r"\{kind: '(\w+)', pre: (\d+), post: (\d+)", src)]
     return out
 
 
@@ -47,6 +48,10 @@ SCENE_F = TL["SCENE_LEN"]
 INTRO_F = TL["INTRO_LEN"]
 OUTRO_F = TL["OUTRO_LEN"]
 STYLES = TL["STYLE_COUNT"]
+RATE = TL["AUTHOR_SCENE"] / SCENE_F  # авторские кадры анимации → реальные
+TRANS = TL["TRANSITIONS"]
+if len(TRANS) != STYLES + 1:
+    raise SystemExit("в timeline.ts ожидалось 11 переходов")
 OUTRO_START_F = INTRO_F + STYLES * SCENE_F
 TOTAL_F = OUTRO_START_F + OUTRO_F
 DUR = TOTAL_F / FPS
@@ -61,6 +66,15 @@ def sec(frame: float) -> float:
 
 def scene_f(i: int) -> int:
     return INTRO_F + i * SCENE_F
+
+
+def at(seg_start_f: float, authored: float) -> float:
+    """Секунды для события, записанного в авторских кадрах сегмента"""
+    return sec(seg_start_f + authored / RATE)
+
+
+def sa(i: int, authored: float) -> float:
+    return at(scene_f(i), authored)
 
 
 def midi(n: float) -> float:
@@ -209,10 +223,10 @@ def crush(x: np.ndarray, bits: int, hold: int) -> np.ndarray:
 
 # ---------------------------------------------------------------- инструменты
 def kick(punch: float = 1.0) -> np.ndarray:
-    d = 0.36
+    d = 0.3
     t = tarr(d)
     f = 52 + 125 * np.exp(-t / 0.03) * punch
-    body = osc_sine(f, d) * env_exp(d, 0.17, 0.001)
+    body = osc_sine(f, d) * env_exp(d, 0.13, 0.001)
     knock = osc_sine(118, d) * env_exp(d, 0.035, 0.001) * 0.3
     click = hp(noise(0.01), 2500) * env_exp(0.01, 0.002, 0.0005) * 0.35
     body = body + knock
@@ -232,11 +246,13 @@ def clap() -> np.ndarray:
     return (x + body) * 0.8
 
 
-def hat(open_: bool = False) -> np.ndarray:
-    d = 0.32 if open_ else 0.07
+def hat(open_: bool = False, length: float = 0.32) -> np.ndarray:
+    d = length if open_ else 0.07
     metal = sum(osc_square(f, d) for f in (205.3, 304.4, 369.6, 522.7, 540.0, 800.0)) / 6
     x = hp(bp(metal * 0.6 + noise(d) * 0.4, 6500, 15000), 7000)
-    return x * env_exp(d, 0.11 if open_ else 0.022, 0.0005)
+    e = env_exp(d, 0.08 if open_ else 0.022, 0.0005)
+    e *= np.clip((d - tarr(d)) / 0.01, 0, 1)  # мягкий конец
+    return x * e
 
 
 def bell(freq: float, dur: float = 1.6, index: float = 2.2, ratio: float = 3.5) -> np.ndarray:
@@ -344,36 +360,35 @@ def put_kick(t: float, gain: float = 1.0, punch: float = 1.0) -> None:
     kick_times.append(t)
 
 
-def groove_bar(i: int, variant: str = "full") -> None:
-    """Барабаны на один такт сцены i"""
-    b = scene_f(i)
-    kicks = {"full": [0, 8, 10], "sparse": [0, 8], "push": [0, 6, 8, 10, 14]}[variant]
-    for s in kicks:
-        put_kick(step_time(b, s), 1.0 if s in (0, 8) else 0.8)
+def groove_bar(bar_f: float, variant: str = "full") -> None:
+    """Хаус-грув на такт: бочка на каждую долю, хлопок на 2 и 4, открытый хэт на слабых восьмых"""
+    for s in (0, 4, 8, 12):
+        put_kick(step_time(bar_f, s), 1.0 if s == 0 else 0.9)
+    if variant == "push":
+        put_kick(step_time(bar_f, 14), 0.5, 0.6)
+        put_kick(step_time(bar_f, 15), 0.45, 0.6)
     for s in (4, 12):
         c = clap()
-        drums.add(c, step_time(b, s), 0.55)
-        verb_send.add(c, step_time(b, s), 0.22)
-    for s in range(0, 16, 2):
-        drums.add(hat(), step_time(b, s), 0.16 if s % 4 == 0 else 0.24, pan=0.25)
-    for s in (7, 13, 15):
-        drums.add(hat(), step_time(b, s), 0.09, pan=-0.2)
-    if i % 2 == 1:
-        drums.add(hat(True), step_time(b, 14), 0.12, pan=0.3)
+        drums.add(c, step_time(bar_f, s), 0.5)
+        verb_send.add(c, step_time(bar_f, s), 0.16)
+    for s in range(16):
+        if s % 4 == 2:
+            drums.add(hat(True, 0.15), step_time(bar_f, s), 0.2, pan=0.2)
+        else:
+            drums.add(hat(), step_time(bar_f, s), 0.11 if s % 2 == 0 else 0.07, pan=-0.25 if s % 2 else 0.1)
 
 
-def bass_bar(i: int, chord: str) -> None:
-    b = scene_f(i)
+def bass_bar(bar_f: float, chord: str) -> None:
+    """Бас на слабых восьмых — классическая «качка» хауса"""
     root = CHORDS[chord]["root"]
-    pattern = [(0, 0, 2.5), (3, 0, 1.5), (6, 12, 1.5), (8, 0, 2.5), (11, 0, 1.5), (14, 7, 1.5)]
-    for s, off, length in pattern:
+    for s, off in ((2, 0), (6, 0), (10, 0), (14, 12)):
         f = midi(root + off)
-        d = length * STEP_F / FPS
-        sub = osc_sine(f, d + 0.06)
-        mid = soft(osc_saw(f * 2, d + 0.06) * 0.6, 2.0)
+        d = 1.7 * STEP_F / FPS
+        sub = osc_sine(f, d + 0.05)
+        mid = soft(osc_saw(f * 2, d + 0.05) * 0.6, 2.0)
         x = sub * 0.42 + lp(mid, 1500) * 0.72
-        e = fit(env_adsr(d, 0.004, 0.12, 0.75, 0.06), len(x))
-        bass.add(x * e, step_time(b, s), 0.55)
+        e = fit(env_adsr(d, 0.004, 0.08, 0.7, 0.05), len(x))
+        bass.add(x * e, step_time(bar_f, s), 0.55)
 
 
 def pad_bar(start_f: float, chord: str, bars: float = 1.0, gain: float = 0.2, cutoff: float = 1800) -> None:
@@ -381,223 +396,235 @@ def pad_bar(start_f: float, chord: str, bars: float = 1.0, gain: float = 0.2, cu
     x = pad_chord(CHORDS[chord]["pad"], d, cutoff)
     music.add(x, sec(start_f), gain, pan=-0.1)
     music.add(x, sec(start_f) + 0.012, gain * 0.8, pan=0.3)
-    verb_send.add(x, sec(start_f), gain * 0.6)
+    verb_send.add(x, sec(start_f), gain * 0.5)
 
 
-def arp_bar(i: int, chord: str, gain: float, kind: str = "pluck", every: int = 1) -> None:
-    b = scene_f(i)
+def arp_bar(bar_f: float, chord: str, gain: float, kind: str = "pluck", every: int = 1) -> None:
     notes = CHORDS[chord]["arp"]
     for s in range(0, 16, every):
         n = notes[s % len(notes)] + 12
         if kind == "pluck":
-            x = pluck_saw(midi(n), 0.3, 1800, 0.08)
+            x = pluck_saw(midi(n), 0.22, 1800, 0.06)
         elif kind == "saw":
-            x = pluck_saw(midi(n - 12), 0.4, 3200, 0.14)
+            x = pluck_saw(midi(n - 12), 0.3, 3200, 0.1)
         else:
-            x = bell(midi(n), 0.9, 1.4, 2.0)
-        t = step_time(b, s)
+            x = bell(midi(n), 0.7, 1.4, 2.0)
+        t = step_time(bar_f, s)
         music.add(x, t, gain, pan=0.35 if s % 2 else -0.35)
         # эхо пунктирной восьмой
-        music.add(x, t + 3 * STEP_F / FPS, gain * 0.35, pan=-0.5 if s % 2 else 0.5)
-        verb_send.add(x, t, gain * 0.3)
+        music.add(x, t + 3 * STEP_F / FPS, gain * 0.3, pan=-0.5 if s % 2 else 0.5)
+        verb_send.add(x, t, gain * 0.25)
 
 
 def transition_whoosh(cut_f: int, pre: int, post: int, f0: float, f1: float, gain: float, pan: float = 0.0) -> None:
-    d = (pre + post + 6) / FPS
-    sfx.add(whoosh(d, f0, f1), sec(cut_f - pre - 3), gain, pan)
+    d = (pre + post + 4) / FPS
+    sfx.add(whoosh(d, f0, f1), sec(cut_f - pre - 2), gain, pan)
 
 
 def build() -> None:
-    # ---------------- Интро
-    pad_bar(0, "Am", 1.0, 0.11, 900)
-    r = riser(sec(INTRO_F))
-    gap = int(0.05 * SR)
-    r[-gap:] *= np.linspace(1, 0, gap) ** 3
-    sfx.add(r, 0.0, 0.16)
-    sfx.add(pop(1400), sec(7), 0.32)  # точка появилась
-    sfx.add(impact(0.55), sec(15), 0.38)  # круг растёт
-    verb_send.add(bell(midi(81), 1.5), sec(16), 0.12)
-    sfx.add(whoosh(0.9, 400, 4000), sec(44), 0.16, -0.3)  # кольцевая надпись
-    for k in range(10):  # десять делений
-        sfx.add(blip(midi(76 + [0, 2, 3, 5, 7, 8, 10, 12, 14, 15][k]), 0.06), sec(52 + k * 1.6), 0.09, -0.6 + k * 0.13)
-    for s in range(8, 16):
-        drums.add(hat(), step_time(0, s), 0.05 + 0.012 * (s - 8))
-
-    # ---------------- Сцены
-    for i in range(STYLES):
-        chord = PROG[i]
-        variant = "sparse" if i in (3,) else "push" if i in (4, 6) else "full"
-        groove_bar(i, variant)
-        bass_bar(i, chord)
-        pad_bar(scene_f(i), chord, 1.0, 0.17 if i != 8 else 0.2)
-        if i in (0, 2, 3, 4, 6):
-            arp_bar(i, chord, 0.075, "pluck", 2)
-        if i == 7:
-            arp_bar(i, chord, 0.08, "bell", 2)
-        if i == 8:
-            arp_bar(i, chord, 0.12, "saw", 1)
-
-    # Переходы: окно [cut - pre, cut + post)
     cuts = [scene_f(i) for i in range(STYLES)] + [OUTRO_START_F]
-    sfx.add(impact(1.1), sec(cuts[0]), 0.5)  # дроп: ирис в ар-деко
-    verb_send.add(impact(1.0), sec(cuts[0]), 0.15)
-    transition_whoosh(cuts[1], 6, 8, 600, 5000, 0.22, -0.6)  # часы
-    transition_whoosh(cuts[2], 7, 7, 300, 7000, 0.28, 0.5)  # диагональ
-    for k in range(12):  # колонки падают
-        tk = cuts[3] - 8 + (k * 0.05 / 1.55) * 16
-        sfx.add(wood(1400 + k * 60), sec(tk), 0.12, -0.8 + k * 0.145)
-    for k in range(18):  # растровые точки
-        sfx.add(pop(1600 + rng.random() * 1800), sec(cuts[4] - 8 + k * 0.9), 0.07, rng.random() * 1.6 - 0.8)
-    # плавление: свист вниз
-    melt = whoosh(0.7, 3000, 250)
-    sfx.add(melt, sec(cuts[5] - 6), 0.24)
-    for k in range(9):  # фигуры
-        sfx.add(pop(500 + k * 90), sec(cuts[6] - 8 + k * 1.6), 0.13, rng.random() * 1.4 - 0.7)
-    sfx.add(pop(2400), sec(cuts[7]), 0.35)  # пузырь лопается
-    sfx.add(whoosh(0.5, 2000, 12000), sec(cuts[7] - 4), 0.18)
-    for k in range(12):  # жалюзи
-        tk = cuts[8] - 8 + (k * (0.5 / 11) / 1.5) * 16
-        sfx.add(wood(2600 - k * 80), sec(tk), 0.09, 0.4 - k * 0.07)
-    sfx.add(whoosh(0.5, 1500, 9000), sec(cuts[8] - 8), 0.12)
-    dig = crush(noise(0.3) * 0.6, 4, 12)
-    sfx.add(dig, sec(cuts[9] - 5), 0.2)  # цифровой срыв
+    tr = {k: (pre, post) for k, pre, post in TRANS}
 
-    # ---------------- Подписи сцен
+    # ---------------- Интро (1 такт): приглушённая бочка и подъём к дропу
+    pad_bar(0, "Am", 1.0, 0.1, 900)
+    for s in (0, 4, 8, 12):
+        k = lp(kick(0.8), 300)
+        drums.add(k, step_time(0, s), 0.55)
+    for s in range(8, 16):
+        drums.add(hat(), step_time(0, s), 0.04 + 0.01 * (s - 8))
+    r = riser(sec(INTRO_F))
+    gap = int(0.045 * SR)
+    r[-gap:] *= np.linspace(1, 0, gap) ** 3
+    sfx.add(r, 0.0, 0.17)
+    sfx.add(pop(1400), at(0, 7), 0.3)  # точка
+    sfx.add(impact(0.5), at(0, 15), 0.34)  # точка вырастает в круг
+    verb_send.add(bell(midi(81), 1.2), at(0, 16), 0.1)
+    sfx.add(whoosh(0.6, 400, 4000), at(0, 44), 0.14, -0.3)  # кольцевая надпись
+    for k in range(10):
+        sfx.add(blip(midi(76 + [0, 2, 3, 5, 7, 8, 10, 12, 14, 15][k]), 0.05), at(0, 52 + k * 1.6), 0.08, -0.6 + k * 0.13)
+
+    # ---------------- Сцены: аккорд, бас, грув, арпеджио
+    for i in range(STYLES):
+        b = scene_f(i)
+        chord = PROG[i]
+        groove_bar(b, "push" if i in (2, 4, 8) else "full")
+        bass_bar(b, chord)
+        pad_bar(b, chord, 1.0, 0.16)
+        if i in (0, 2, 3, 4, 6):
+            arp_bar(b, chord, 0.07, "pluck", 1)
+        if i == 5:
+            arp_bar(b, chord, 0.05, "pluck", 2)
+        if i == 7:
+            arp_bar(b, chord, 0.07, "bell", 2)
+        if i == 8:
+            arp_bar(b, chord, 0.11, "saw", 1)
+
+    # ---------------- Переходы
+    sfx.add(impact(1.1), sec(cuts[0]), 0.5)  # дроп: ирис в ар-деко
+    verb_send.add(impact(1.0), sec(cuts[0]), 0.14)
+    for k in range(1, len(cuts)):  # короткий подъём к каждой склейке
+        sfx.add(riser(0.22) * 0.8, sec(cuts[k]) - 0.22, 0.1, 0.0)
+    pre, post = tr["clock"]
+    transition_whoosh(cuts[1], pre, post, 600, 5000, 0.24, -0.6)
+    pre, post = tr["diagonal"]
+    transition_whoosh(cuts[2], pre, post, 300, 7000, 0.3, 0.5)
+    pre, post = tr["columns"]
+    for k in range(12):  # колонки падают по очереди
+        tk = cuts[3] - pre + (k * 0.05 / 1.55) * (pre + post)
+        sfx.add(wood(1400 + k * 60), sec(tk), 0.11, -0.8 + k * 0.145)
+    pre, post = tr["halftone"]
+    for k in range(16):
+        sfx.add(pop(1600 + rng.random() * 1800), sec(cuts[4] - pre + k * (pre + post) / 16), 0.07, rng.random() * 1.6 - 0.8)
+    pre, post = tr["melt"]
+    sfx.add(whoosh((pre + post) / FPS + 0.1, 3000, 250), sec(cuts[5] - pre), 0.24)
+    pre, post = tr["shapes"]
+    for k in range(9):
+        sfx.add(pop(500 + k * 90), sec(cuts[6] - pre + k * (pre + post) / 9), 0.13, rng.random() * 1.4 - 0.7)
+    pre, post = tr["flash"]
+    sfx.add(pop(2400), sec(cuts[7]), 0.35)
+    sfx.add(whoosh((pre + post) / FPS + 0.1, 2000, 12000), sec(cuts[7] - pre), 0.18)
+    pre, post = tr["blinds"]
+    for k in range(12):
+        tk = cuts[8] - pre + (k * (0.5 / 11) / 1.5) * (pre + post)
+        sfx.add(wood(2600 - k * 80), sec(tk), 0.09, 0.4 - k * 0.07)
+    pre, post = tr["glitch"]
+    sfx.add(crush(noise(0.25) * 0.6, 4, 12), sec(cuts[9] - pre), 0.2)
+    for k in (1, 3, 5, 7):  # удары на сильных склейках
+        sfx.add(impact(0.6), sec(cuts[k]), 0.16)
+
+    # ---------------- Подписи сцен (время в авторских кадрах сцены)
     # 01 Ар-деко: колокольчики-глиссандо под лучи, блеск на медальоне
-    b = scene_f(0)
     for k, n in enumerate([69, 72, 76, 79, 83, 84, 88, 93]):
-        x = bell(midi(n), 1.6)
-        music.add(x, sec(b + 2 + k * 2.2), 0.07, -0.6 + k * 0.17)
-        verb_send.add(x, sec(b + 2 + k * 2.2), 0.08)
-    sfx.add(whoosh(0.6, 5000, 14000), sec(b + 28), 0.08, 0.4)
+        x = bell(midi(n), 1.3)
+        music.add(x, sa(0, 2 + k * 2.2), 0.06, -0.6 + k * 0.17)
+        verb_send.add(x, sa(0, 2 + k * 2.2), 0.07)
+    sfx.add(whoosh(0.45, 5000, 14000), sa(0, 28), 0.08, 0.4)
 
     # 02 Баухаус: механика
-    b = scene_f(1)
     for f, fq, g in ((18, 700, 0.3), (24, 520, 0.34), (30, 900, 0.18), (32, 1100, 0.16), (40, 800, 0.22), (60, 800, 0.22)):
-        sfx.add(wood(fq), sec(b + f), g)
+        sfx.add(wood(fq), sa(1, f), g)
     for k in range(7):
-        sfx.add(wood(2200 + k * 40), sec(b + 22 + k * 2.6), 0.1, -0.5 + k * 0.12)
+        sfx.add(wood(2200 + k * 40), sa(1, 22 + k * 2.6), 0.1, -0.5 + k * 0.12)
     for f in (30, 50, 70):
-        for r in range(3):
-            sfx.add(wood(1600), sec(b + f + r * 1.5), 0.07, -0.7)
+        for rr in range(3):
+            sfx.add(wood(1600), sa(1, f + rr * 1.5), 0.07, -0.7)
 
     # 03 Конструктивизм: свист клина и металлический удар
-    b = scene_f(2)
-    sfx.add(whoosh(10 / FPS + 0.1, 200, 3000, swell=0), sec(b + 6), 0.3, -0.5)
-    sfx.add(metal_hit(), sec(b + 16), 0.42, 0.15)
-    verb_send.add(metal_hit(), sec(b + 16), 0.18)
+    sfx.add(whoosh(10 / RATE / FPS + 0.08, 200, 3000, swell=0), sa(2, 6), 0.3, -0.5)
+    sfx.add(metal_hit(), sa(2, 16), 0.42, 0.15)
+    verb_send.add(metal_hit(), sa(2, 16), 0.16)
     for k in range(0, 14, 2):
-        sfx.add(kick(0.4)[: int(0.12 * SR)], sec(b + 13 + k * 1.3), 0.14, -0.6 + k * 0.09)
-    hum = osc_sine(60, sec(SCENE_F)) * 0.5 + osc_sine(120.5, sec(SCENE_F)) * 0.2
-    sfx.add(hum * fit(env_adsr(sec(SCENE_F) - 0.3, 0.3, 1, 1, 0.3), len(hum)), sec(b), 0.04)
+        sfx.add(kick(0.4)[: int(0.1 * SR)], sa(2, 13 + k * 1.3), 0.12, -0.6 + k * 0.09)
 
     # 04 Швейцарский: точные тики, панорама вслед за кругом (справа налево)
-    b = scene_f(3)
-    for k, f in enumerate((26, 36, 46, 56)):
-        sfx.add(blip(2093, 0.03), sec(b + f), 0.22, 0.55 - k * 0.3)
-        sfx.add(blip(4186, 0.015), sec(b + f), 0.08, 0.55 - k * 0.3)
+    for k, f in enumerate((30, 40, 50, 60)):
+        sfx.add(blip(2093, 0.03), sa(3, f), 0.22, 0.55 - k * 0.3)
+        sfx.add(blip(4186, 0.015), sa(3, f), 0.08, 0.55 - k * 0.3)
 
     # 05 Поп-арт: «поу» и слэм заголовка
-    b = scene_f(4)
-    sfx.add(crush(impact(1.2), 6, 3), sec(b), 0.3)
+    sfx.add(crush(impact(1.2), 6, 3), sa(4, 0), 0.3)
     imp = impact(1.3)
     slam = imp + fit(clap(), len(imp))
-    sfx.add(soft(slam, 2.0), sec(b + 15), 0.42)
-    verb_send.add(clap(), sec(b + 15), 0.3)
-    sfx.add(boing(140), sec(b + 17), 0.12)
+    sfx.add(soft(slam, 2.0), sa(4, 15), 0.42)
+    verb_send.add(clap(), sa(4, 15), 0.28)
+    sfx.add(boing(140), sa(4, 17), 0.11)
 
-    # 06 Психоделия: вау-стабы на слабые доли и пульсирующий гул
-    b = scene_f(5)
+    # 06 Психоделия: вау-стабы на слабых восьмых
     for s in (2, 6, 10, 14):
-        d = 0.32
-        notes = CHORDS["F"]["pad"]
-        x = sum(osc_saw(midi(n), d) for n in notes) / 4
+        d = 0.24
+        x = sum(osc_saw(midi(n), d) for n in CHORDS["F"]["pad"]) / 4
         fc = 400 + 2600 * np.sin(np.pi * np.clip(tarr(d) / d, 0, 1)) ** 2
-        y = svf(x, fc, 3.0, "lp") * env_exp(d, 0.2, 0.004)
-        music.add(y, step_time(b, s), 0.2, 0.4 if s % 4 == 2 else -0.4)
-        verb_send.add(y, step_time(b, s), 0.1)
-    drone = osc_saw(midi(41), sec(SCENE_F)) * (1 + 0.5 * np.sin(2 * np.pi * 0.75 * tarr(sec(SCENE_F))))
-    music.add(lp(drone, 500) * fit(env_adsr(sec(SCENE_F) - 0.2, 0.3, 1, 1, 0.2), len(drone)), sec(b), 0.05)
+        y = svf(x, fc, 3.0, "lp") * env_exp(d, 0.15, 0.004)
+        music.add(y, step_time(scene_f(5), s), 0.2, 0.4 if s % 4 == 2 else -0.4)
+        verb_send.add(y, step_time(scene_f(5), s), 0.1)
 
-    # 07 Мемфис: «боинги» и поп-щелчки букв
-    b = scene_f(6)
-    sfx.add(boing(150), sec(b + 10), 0.28)  # круг коснулся «пола»
-    sfx.add(boing(190), sec(b + 15.5), 0.1)  # первый отскок
-    sfx.add(pop(700), sec(b + 4), 0.18, 0.5)
-    sfx.add(pop(560), sec(b + 7), 0.18, -0.5)
+    # 07 Мемфис: «боинги» на касаниях «пола» и поп-ноты букв
+    sfx.add(boing(150), sa(6, 10), 0.28)
+    sfx.add(boing(190), sa(6, 15.5), 0.1)
+    sfx.add(pop(700), sa(6, 4), 0.18, 0.5)
+    sfx.add(pop(560), sa(6, 7), 0.18, -0.5)
     pent = [72, 74, 76, 79, 81, 84]
     for k in range(6):
-        sfx.add(pop(midi(pent[k])), sec(b + 18 + k * 2.2), 0.16, -0.5 + k * 0.2)  # буква приземлилась
+        sfx.add(pop(midi(pent[k])), sa(6, 18 + k * 2.2), 0.16, -0.5 + k * 0.2)
     for hop in (40, 60):
         for k in range(6):
-            sfx.add(blip(midi(pent[k] + 12), 0.04), sec(b + hop + k * 2), 0.06, -0.5 + k * 0.2)
-    sfx.add(boing(220), sec(b + 66), 0.12)
+            sfx.add(blip(midi(pent[k] + 12), 0.035), sa(6, hop + k * 2), 0.06, -0.5 + k * 0.2)
+    sfx.add(boing(220), sa(6, 66), 0.12)
 
     # 08 Y2K: надувание, искры, блеск
-    b = scene_f(7)
-    sfx.add(boing(320), sec(b + 1), 0.14)
+    sfx.add(boing(320), sa(7, 1), 0.14)
     for k, f in enumerate((10, 18, 27, 33, 45, 52, 63, 70)):
-        x = bell(midi(96 + [0, 3, 7, 10, 12, 7, 3, 15][k]), 0.8, 1.2, 2.0)
-        sfx.add(x, sec(b + f), 0.05, rng.random() * 1.6 - 0.8)
-        verb_send.add(x, sec(b + f), 0.05)
+        x = bell(midi(96 + [0, 3, 7, 10, 12, 7, 3, 15][k]), 0.6, 1.2, 2.0)
+        sfx.add(x, sa(7, f), 0.05, rng.random() * 1.6 - 0.8)
+        verb_send.add(x, sa(7, f), 0.05)
     for f in (18, 56):
-        sfx.add(whoosh(0.5, 4000, 15000), sec(b + f), 0.1, 0.3)
+        sfx.add(whoosh(0.4, 4000, 15000), sa(7, f), 0.1, 0.3)
 
-    # 09 Ретровейв: неон включается с тем же мерцанием, что и картинка
-    b = scene_f(8)
+    # 09 Ретровейв: неон включается с тем же мерцанием, что и картинка (авторские кадры 0–11)
     flicker = [1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1]
-    d = len(flicker) / FPS + 0.3
+    d = len(flicker) / RATE / FPS + 0.3
     z = hp(soft(osc_saw(100, d) * 0.7 + osc_square(150, d) * 0.3, 2.5), 120)
     tt = tarr(d)
-    gate = np.array([flicker[min(int(x * FPS), len(flicker) - 1)] if x * FPS < len(flicker) else 0.35 for x in tt], dtype=float)
+    fa = tt * FPS * RATE  # авторский кадр
+    gate = np.array([flicker[int(x)] if x < len(flicker) else 0.35 for x in fa], dtype=float)
     gate = np.convolve(gate, np.ones(96) / 96, mode="same")
-    gate *= np.where(tt * FPS > len(flicker), np.exp(-(tt * FPS - len(flicker)) / 3), 1)
-    sfx.add(z * gate, sec(b), 0.12)
-    fly = tarr(0.5)
-    fly_sig = svf(noise(0.5), 6000 * np.exp(-fly / 0.25) + 300, 1.2, "bp") * np.sin(np.pi * np.clip(fly / 0.5, 0, 1))
-    sfx.add(fly_sig, sec(b + 6), 0.3, 0.7)
-    # «гейтовый» реверб на хлопках — примета 80-х
-    for s in (4, 12):
-        tt = tarr(0.25)
-        tail = lp(noise(0.25), 6000) * np.clip((0.22 - tt) / 0.01, 0, 1) * 0.25
-        verb_send.add(tail, step_time(b, s), 0.25)
+    gate *= np.where(fa > len(flicker), np.exp(-(fa - len(flicker)) / 3), 1)
+    sfx.add(z * gate, sa(8, 0), 0.12)
+    fly = tarr(0.4)
+    fly_sig = svf(noise(0.4), 6000 * np.exp(-fly / 0.18) + 300, 1.2, "bp") * np.sin(np.pi * np.clip(fly / 0.4, 0, 1))
+    sfx.add(fly_sig, sa(8, 6), 0.3, 0.7)
+    for s in (4, 12):  # «гейтовый» реверб на хлопках — примета 80-х
+        tt = tarr(0.2)
+        tail = lp(noise(0.2), 6000) * np.clip((0.18 - tt) / 0.01, 0, 1) * 0.25
+        verb_send.add(tail, step_time(scene_f(8), s), 0.25)
 
-    # 10 Глитч: см. post-обработку (стоттер, биткраш) ниже
-    b = scene_f(9)
+    # 10 Глитч: блипы и цифровой шум в окнах сбоев (заедание — в glitch_post)
     for k in range(10):
         f = 1200 + rng.random() * 2400
-        sfx.add(blip(f, 0.035, "square"), sec(b + 42 + k * 1.4), 0.05, rng.random() * 1.6 - 0.8)
+        sfx.add(blip(f, 0.03, "square"), sa(9, 42 + k * 1.4), 0.05, rng.random() * 1.6 - 0.8)
     for f in (0, 3, 44, 49, 65):
-        sfx.add(crush(noise(0.12), 3, 20), sec(b + f), 0.09)
-    # выключение ЭЛТ
-    d = 0.42
+        sfx.add(crush(noise(0.1), 3, 20), sa(9, f), 0.09)
+    pre, post = tr["crt"]
+    d = pre / FPS + 0.2
     tt = tarr(d)
-    off = osc_sine(1800 * np.exp(-tt / 0.08) + 60, d) * env_exp(d, 0.18, 0.001)
-    sfx.add(off, sec(OUTRO_START_F - 8), 0.24)
-    sfx.add(hp(noise(0.3), 3000) * env_exp(0.3, 0.06), sec(OUTRO_START_F - 8), 0.08)
+    off = osc_sine(1800 * np.exp(-tt / 0.06) + 60, d) * env_exp(d, 0.14, 0.001)
+    sfx.add(off, sec(OUTRO_START_F - pre), 0.24)
+    sfx.add(hp(noise(0.25), 3000) * env_exp(0.25, 0.05), sec(OUTRO_START_F - pre), 0.08)
 
-    # ---------------- Финал
+    # ---------------- Финал (2 такта): бит до итоговой строки, затем аккорд и затухание
     o = OUTRO_START_F
-    tt = tarr(0.5)
-    up = osc_sine(60 + 240 * np.clip(tt / 0.5, 0, 1) ** 2, 0.5) * np.sin(np.pi * np.clip(tt / 0.5, 0, 1))
+    tt = tarr(0.4)
+    up = osc_sine(60 + 240 * np.clip(tt / 0.4, 0, 1) ** 2, 0.4) * np.sin(np.pi * np.clip(tt / 0.4, 0, 1))
     sfx.add(up, sec(o), 0.12)
-    pad_bar(o + 6, "F", 0.6, 0.1, 1200)
-    for k in range(10):
+    pad_bar(o, "F", 0.5, 0.12, 1400)
+    for s in (0, 4):
+        put_kick(step_time(o, s), 0.9)
+    for s in range(0, 8):
+        drums.add(hat(), step_time(o, s), 0.08)
+    drums.add(clap(), step_time(o, 4), 0.4)
+    for k in range(10):  # круги надевают стили
         n = [69, 72, 74, 76, 79, 81, 84, 86, 88, 91][k]
-        x = bell(midi(n), 1.4, 1.5, 3.0)
-        t_arr = sec(o + 12 + k * 1.3 + 16)
+        x = bell(midi(n), 1.2, 1.5, 3.0)
+        t_arr = at(o, 12 + k * 1.3 + 16)
         music.add(x, t_arr, 0.08, -0.8 + k * 0.18)
         verb_send.add(x, t_arr, 0.08)
-    put_kick(sec(o + 46), 0.8, 0.7)
-    sfx.add(impact(0.7), sec(o + 46), 0.22)
-    final = pad_chord([57, 60, 64, 67, 71], sec(OUTRO_F - 46) - 0.6, 1400)
-    music.add(final, sec(o + 46), 0.16, -0.15)
-    music.add(final, sec(o + 46) + 0.015, 0.13, 0.25)
-    verb_send.add(final, sec(o + 46), 0.12)
-    sub = osc_sine(midi(33), sec(OUTRO_F - 46))
-    sub = sub * fit(env_adsr(sec(OUTRO_F - 46) - 0.8, 0.02, 0.8, 0.6, 0.8), len(sub))
-    bass.add(sub, sec(o + 46), 0.4)
-    sfx.add(whoosh(0.9, 5000, 15000), sec(o + 66), 0.06, 0.3)
+    title_t = at(o, 40)  # итоговая строка — на третью долю
+    put_kick(title_t, 1.0, 0.9)
+    sfx.add(impact(0.9), title_t, 0.3)
+    verb_send.add(impact(0.8), title_t, 0.12)
+    tail = sec(TOTAL_F) - title_t
+    final = pad_chord([57, 60, 64, 67, 71], tail - 0.6, 1400)
+    music.add(final, title_t, 0.17, -0.15)
+    music.add(final, title_t + 0.015, 0.14, 0.25)
+    verb_send.add(final, title_t, 0.12)
+    sub = osc_sine(midi(33), tail)
+    sub = sub * fit(env_adsr(tail - 0.8, 0.02, 0.8, 0.6, 0.8), len(sub))
+    bass.add(sub, title_t, 0.4)
+    for k, n in enumerate([81, 84, 88]):
+        x = bell(midi(n), 1.6, 1.2, 2.0)
+        music.add(x, title_t + k * STEP_F / FPS, 0.07, -0.3 + 0.3 * k)
+        verb_send.add(x, title_t + k * STEP_F / FPS, 0.1)
+    sfx.add(whoosh(0.7, 5000, 15000), at(o, 60), 0.06, 0.3)
 
 
 # ---------------------------------------------------------------- сведение
@@ -669,12 +696,11 @@ def sidechain(times: list[float], depth: float = 0.55, rel: float = 0.13) -> np.
 
 def glitch_post(mix_bus: Bus) -> None:
     """Стоттер и биткраш во время сбоев сцены «Глитч» (окна как в glitchSchedule.ts)"""
-    b = scene_f(9)
-    bursts = [(-1, 7), (22, 25), (42, 56), (64, 70)]
+    bursts = [(-1, 7), (22, 25), (42, 56), (64, 70)]  # авторские кадры, как в glitchSchedule.ts
     buf = mix_bus.buf
     for a, z in bursts:
-        i0 = int(sec(b + a) * SR)
-        i1 = int(sec(b + z) * SR)
+        i0 = int(sa(9, a) * SR)
+        i1 = int(sa(9, z) * SR)
         seg = buf[:, i0:i1].copy()
         # повтор кусочков по 1/32 доли — «заедание»
         L = int(STEP_F / 2 / FPS * SR)
@@ -744,7 +770,7 @@ def main() -> int:
     # мягкий вход и затухание в конце
     fi = int(0.01 * SR)
     out[:, :fi] *= np.linspace(0, 1, fi)
-    fo_start = int(sec(TOTAL_F - 34) * SR)
+    fo_start = int(sec(TOTAL_F - 24) * SR)
     fo = N - fo_start
     out[:, fo_start:] *= np.linspace(1, 0, fo) ** 1.5
 

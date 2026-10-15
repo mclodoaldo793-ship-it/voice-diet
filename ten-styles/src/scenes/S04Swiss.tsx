@@ -19,7 +19,8 @@ const COL = (1920 - 2 * MARGIN - 11 * GUTTER) / 12;
 const PITCH = COL + GUTTER;
 const R = 212;
 const CY = 560;
-const STEPS = [26, 36, 46, 56];
+// шаги круга — на восьмые доли (авторские 30/40/50/60 = реальные 21/28/35/42)
+const STEPS = [30, 40, 50, 60];
 const X0 = 1233.33;
 const CAPTIONS: [string, string][] = [
   ['01', 'Сетка'],
